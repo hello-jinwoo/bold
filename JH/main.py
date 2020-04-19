@@ -77,23 +77,19 @@ def train_msmarco(data_dir, args):
     # Check whether have to change optimier
     optimizer = optim.Adam(mode.parameters(), lr=1e-5, weight_decay=1e-6)
 
-    # load dataset 
-    data_train = load_pickle('%s/prepro.train.pkl' % data_dir)
-    data_test = load_pickle('%s/prepro.test.pkl' % data_dir) 
-
+    # train data item -> (q_tokens, d_tokens, label)
+    # dev data item -> (q_tokens, d_tokens, label)
+    # test data item -> (q_tokens, d_tokens)
+    
     # train model 
     for epoch in range(1, args.total_epochs + 1):
-        data_pair = build_pair(data_tarin, oversample=args.oversample, shuffle=True,
-                               max_query_len=args.max_query_len, max_doc_len=args.max_doc_len,
-                               CLS=CSL, SEP=SEP)
         batch_num = len(data_pair) // args.batch_size 
         for batch in pgbar(range(batch_num), pre='[ TRAIN %d ]' % epoch, total_display=10000):
-            rels, urels = build_batch(data_pair, batch, args_batch_size) 
             optimizer.zero_grad() 
-            rel_scores = model(rels['query'].to(device), rels['docs'].to(device), rels['sep_pos'])
-            scores = torch.cat([rel_scores, urel_socres], dim=1)
-            loss = criterion(rel_scores, torch.ones_like(rel_scores).to(device)) +
-                   criterion(urel_scores, torch.zeros_like(urel_scores).to(device))
+            
+            # (q_tok, d_tok, rel) <- dataloader 
+            scores = model(q_tok.to(device), d_tok.to(device), labels)
+            loss = criterion(scores, labels.to(device))
             loss.backward()
             optimizer.step() 
 
@@ -101,7 +97,7 @@ def train_msmarco(data_dir, args):
             if (batch + 1) % (batch_num // 10) == 0:
                 if batch < batch_num - 1:
                     print() 
-                metric = test_msmarco(model, data_test, args) 
+                scores = test_msmarco(model, data_test, args) 
                 for m in sorted(metric, key=lambda x: x.lower()):
                     print('[ %s ] %.4f' % (m.upper(), metric[m]))
                 if max_map < metric['map']:
